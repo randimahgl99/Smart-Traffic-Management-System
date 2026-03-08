@@ -58,14 +58,7 @@ void initialize()
 }
 
 
-// Update vehicle positions
-void updateVehicles(Intersection *in)
-{
-    for(int i = 0; i < in->vehicle_count; i++)
-    {
-        in->vehicles[i].position += in->vehicles[i].speed;
-    }
-}
+
 
 
 // Update traffic signal
