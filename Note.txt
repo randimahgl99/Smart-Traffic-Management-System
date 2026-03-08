@@ -1,0 +1,10 @@
++-----------------+--------------------------------------------------------------+---------------------------------------------------------+
+| Version         | Compile Command                                              | Run Command                                             |
++-----------------+--------------------------------------------------------------+---------------------------------------------------------+
+| Serial          | gcc traffic_serial.c -o traffic_serial                       | ./traffic_serial                                        |
+| OpenMP          | gcc traffic_openmp.c -fopenmp -o traffic_openmp              | export OMP_NUM_THREADS=4; ./traffic_openmp             |
+| MPI             | mpicc traffic_mpi.c -o traffic_mpi                           | mpirun -np 2 ./traffic_mpi                              |
+| Pthreads        | gcc traffic_pthread.c -lpthread -o traffic_pthread           | ./traffic_pthread                                       |
+| CUDA            | nvcc traffic_cuda.cu -o traffic_cuda                         | ./traffic_cuda                                          |
+| Hybrid MPI+OpenMP | mpicc -fopenmp traffic_hybrid_mpi_openmp.c -o traffic_hybrid | export OMP_NUM_THREADS=4; mpirun -np 2 ./traffic_hybrid |
++-----------------+--------------------------------------------------------------+---------------------------------------------------------+
