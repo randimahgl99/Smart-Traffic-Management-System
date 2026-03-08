@@ -67,7 +67,7 @@ void updateVehicles(Intersection *in)
     {
         in->vehicles[i].position += in->vehicles[i].speed;
 
-        // New improvement: reset vehicle position if it exceeds road length
+        // Reset vehicle position if it exceeds road length
         if(in->vehicles[i].position > ROAD_LENGTH)
         {
             in->vehicles[i].position = 0;
