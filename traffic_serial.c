@@ -5,6 +5,7 @@
 #define MAX_INTERSECTIONS 50
 #define MAX_VEHICLES 100
 #define SIMULATION_STEPS 1000
+#define ROAD_LENGTH 200   // Added road length limit
 
 // Vehicle structure
 typedef struct
@@ -42,8 +43,10 @@ void initialize()
     {
         intersections[i].id = i;
 
+        // Random number of vehicles at the intersection
         intersections[i].vehicle_count = rand() % MAX_VEHICLES;
 
+        // Random initial signal state
         intersections[i].signal.state = rand() % 2;
         intersections[i].signal.timer = 0;
 
@@ -63,6 +66,12 @@ void updateVehicles(Intersection *in)
     for(int i = 0; i < in->vehicle_count; i++)
     {
         in->vehicles[i].position += in->vehicles[i].speed;
+
+        // New improvement: reset vehicle position if it exceeds road length
+        if(in->vehicles[i].position > ROAD_LENGTH)
+        {
+            in->vehicles[i].position = 0;
+        }
     }
 }
 
@@ -72,6 +81,7 @@ void updateSignal(Intersection *in)
 {
     in->signal.timer++;
 
+    // Change signal after 10 time steps
     if(in->signal.timer >= 10)
     {
         in->signal.state = 1 - in->signal.state;
@@ -116,7 +126,6 @@ int main()
     printf("Serial Simulation Completed\n");
     printf("Execution Time: %f seconds\n", time_taken);
 
-    // Print sample result
     printf("\nSample Output:\n");
     for(int i = 0; i < 5; i++)
     {
