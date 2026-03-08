@@ -165,3 +165,33 @@ int main()
     }
 
 
+    // Wait for threads
+    for(int i = 0; i < NUM_THREADS; i++)
+    {
+        pthread_join(threads[i], NULL);
+    }
+
+
+    end = clock();
+
+    double time_taken = (double)(end - start) / CLOCKS_PER_SEC;
+
+    printf("Pthread Simulation Completed\n");
+    printf("Number of Threads: %d\n", NUM_THREADS);
+    printf("Execution Time: %f seconds\n", time_taken);
+
+
+    printf("\nSample Output:\n");
+
+    for(int i = 0; i < 5; i++)
+    {
+        printf("Intersection %d Congestion Level: %d\n",
+               intersections[i].id,
+               intersections[i].congestion_level);
+    }
+
+
+    pthread_mutex_destroy(&lock);
+
+    return 0;
+}
