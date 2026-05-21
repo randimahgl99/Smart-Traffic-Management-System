@@ -1,12 +1,12 @@
 Serial
 
 gcc traffic_serial.c -o traffic_serial
-./traffic_serial
+/traffic_serial
 
 OpenMP
 
 gcc traffic_openmp.c -fopenmp -o traffic_openmp
-export OMP_NUM_THREADS=4
+set OMP_NUM_THREADS=8
 ./traffic_openmp
 
 MPI
