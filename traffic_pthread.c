@@ -147,10 +147,9 @@ int main()
     printf("\nSample Output:\n");
     for (int i = 0; i < 5; i++)
     {
-        printf("Intersection %d | Congestion: %d | Signal: %s\n",
+        printf("Intersection %d | Congestion: %d \n",
                intersections[i].id,
-               intersections[i].congestion_level,
-               intersections[i].signal.state ? "GREEN" : "RED");
+               intersections[i].congestion_level);
     }
 
     return 0;
