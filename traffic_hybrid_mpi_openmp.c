@@ -7,17 +7,15 @@
 #define MAX_INTERSECTIONS 50
 #define MAX_VEHICLES 100
 #define SIMULATION_STEPS 1000
+#define ROAD_LENGTH 200   // ✅ FIXED
 
-
-// Vehicle structure
+// ---------------- Structures ----------------
 typedef struct
 {
     int position;
     int speed;
 } Vehicle;
 
-
-// Intersection structure
 typedef struct
 {
     int id;
@@ -28,13 +26,13 @@ typedef struct
     int congestion_level;
 } Intersection;
 
-
 Intersection intersections[MAX_INTERSECTIONS];
 
-
-// Initialize system (only root)
+// ---------------- Initialization ----------------
 void initialize()
 {
+    srand(42); // FIXED seed for fair comparison
+
     for(int i = 0; i < MAX_INTERSECTIONS; i++)
     {
         intersections[i].id = i;
@@ -45,25 +43,27 @@ void initialize()
 
         for(int j = 0; j < intersections[i].vehicle_count; j++)
         {
-            intersections[i].vehicles[j].position = rand() % 100;
+            intersections[i].vehicles[j].position = rand() % ROAD_LENGTH;
             intersections[i].vehicles[j].speed = rand() % 5 + 1;
         }
     }
 }
 
-
-
-// Update vehicle
+// ---------------- Core Functions ----------------
 void updateVehicles(Intersection *in)
 {
     for(int i = 0; i < in->vehicle_count; i++)
     {
         in->vehicles[i].position += in->vehicles[i].speed;
+
+        // ✅ CONSISTENCY FIX (same as serial / CUDA / pthread)
+        if(in->vehicles[i].position > ROAD_LENGTH)
+        {
+            in->vehicles[i].position = 0;
+        }
     }
 }
 
-
-// Update signal
 void updateSignal(Intersection *in)
 {
     in->signal_timer++;
@@ -75,94 +75,69 @@ void updateSignal(Intersection *in)
     }
 }
 
-
-// Calculate congestion
 void calculateCongestion(Intersection *in)
 {
     in->congestion_level = in->vehicle_count;
 }
 
-
-
+// ---------------- MAIN ----------------
 int main(int argc, char *argv[])
 {
     int rank, size;
 
     MPI_Init(&argc, &argv);
-
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    srand(time(NULL) + rank);
-
+    srand(42 + rank); // FIXED SEED CONSISTENCY
 
     if(rank == 0)
     {
         initialize();
     }
 
-
-    // Broadcast data to all MPI processes
     MPI_Bcast(intersections,
               sizeof(intersections),
               MPI_BYTE,
               0,
               MPI_COMM_WORLD);
 
-
-    int intersections_per_process = MAX_INTERSECTIONS / size;
-
-    int start = rank * intersections_per_process;
-    int end = start + intersections_per_process;
-
+    int base = MAX_INTERSECTIONS / size;
+    int start = rank * base;
+    int end = (rank == size - 1) ? MAX_INTERSECTIONS : start + base;
 
     double start_time = MPI_Wtime();
 
-
-    // Simulation loop
     for(int t = 0; t < SIMULATION_STEPS; t++)
     {
-
-        // OpenMP parallel region inside MPI process
-        #pragma omp parallel for
+        #pragma omp parallel for schedule(static)
         for(int i = start; i < end; i++)
         {
             updateVehicles(&intersections[i]);
             updateSignal(&intersections[i]);
             calculateCongestion(&intersections[i]);
         }
-
     }
-
 
     double end_time = MPI_Wtime();
 
-
-    // Gather results back to root
     MPI_Gather(&intersections[start],
-               intersections_per_process * sizeof(Intersection),
+               (end - start) * sizeof(Intersection),
                MPI_BYTE,
                intersections,
-               intersections_per_process * sizeof(Intersection),
+               (end - start) * sizeof(Intersection),
                MPI_BYTE,
                0,
                MPI_COMM_WORLD);
-
-
 
     if(rank == 0)
     {
         printf("Hybrid MPI + OpenMP Simulation Completed\n");
         printf("MPI Processes: %d\n", size);
-        printf("OpenMP Threads per Process: %d\n",
-               omp_get_max_threads());
-
-        printf("Execution Time: %f seconds\n",
-               end_time - start_time);
-
+        printf("OpenMP Threads per Process: %d\n", omp_get_max_threads());
+        printf("Execution Time: %f seconds\n", end_time - start_time);
 
         printf("\nSample Output:\n");
-
         for(int i = 0; i < 5; i++)
         {
             printf("Intersection %d Congestion Level: %d\n",
@@ -171,8 +146,6 @@ int main(int argc, char *argv[])
         }
     }
 
-
     MPI_Finalize();
-
     return 0;
 }

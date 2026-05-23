@@ -6,10 +6,9 @@
 #define MAX_INTERSECTIONS 50
 #define MAX_VEHICLES 100
 #define SIMULATION_STEPS 1000
-#define NUM_THREADS 4   // Change this for testing (2, 4, 8 etc.)
+#define NUM_THREADS 4
+#define ROAD_LENGTH 200   // ✅ FIXED
 
-
-// Vehicle structure
 typedef struct
 {
     int id;
@@ -17,16 +16,12 @@ typedef struct
     int speed;
 } Vehicle;
 
-
-// Traffic signal structure
 typedef struct
 {
     int state;
     int timer;
 } TrafficSignal;
 
-
-// Intersection structure
 typedef struct
 {
     int id;
@@ -36,28 +31,18 @@ typedef struct
     int congestion_level;
 } Intersection;
 
-
-// Global shared traffic network
 Intersection intersections[MAX_INTERSECTIONS];
 
-
-// Mutex lock for synchronization
-pthread_mutex_t lock;
-
-
-// Thread argument structure
 typedef struct
 {
     int start;
     int end;
 } ThreadData;
 
-
-
-// Initialize system
+// ---------------- INIT ----------------
 void initialize()
 {
-    for(int i = 0; i < MAX_INTERSECTIONS; i++)
+    for (int i = 0; i < MAX_INTERSECTIONS; i++)
     {
         intersections[i].id = i;
         intersections[i].vehicle_count = rand() % MAX_VEHICLES;
@@ -65,63 +50,54 @@ void initialize()
         intersections[i].signal.state = rand() % 2;
         intersections[i].signal.timer = 0;
 
-        for(int j = 0; j < intersections[i].vehicle_count; j++)
+        for (int j = 0; j < intersections[i].vehicle_count; j++)
         {
             intersections[i].vehicles[j].id = j;
-            intersections[i].vehicles[j].position = rand() % 100;
+            intersections[i].vehicles[j].position = rand() % ROAD_LENGTH;
             intersections[i].vehicles[j].speed = rand() % 5 + 1;
         }
     }
 }
 
-
-
-// Update vehicles
+// ---------------- LOGIC ----------------
 void updateVehicles(Intersection *in)
 {
-    for(int i = 0; i < in->vehicle_count; i++)
+    for (int i = 0; i < in->vehicle_count; i++)
     {
         in->vehicles[i].position += in->vehicles[i].speed;
+
+        // ✅ FIX: same as serial model
+        if (in->vehicles[i].position > ROAD_LENGTH)
+        {
+            in->vehicles[i].position = 0;
+        }
     }
 }
 
-
-
-// Update signal
 void updateSignal(Intersection *in)
 {
     in->signal.timer++;
 
-    if(in->signal.timer >= 10)
+    if (in->signal.timer >= 10)
     {
         in->signal.state = 1 - in->signal.state;
         in->signal.timer = 0;
     }
 }
 
-
-
-// Calculate congestion
 void calculateCongestion(Intersection *in)
 {
-    // Protect shared data using mutex
-    pthread_mutex_lock(&lock);
-
     in->congestion_level = in->vehicle_count;
-
-    pthread_mutex_unlock(&lock);
 }
 
-
-
-// Thread function
+// ---------------- THREAD FUNCTION ----------------
 void* processIntersections(void* arg)
 {
     ThreadData *data = (ThreadData*)arg;
 
-    for(int t = 0; t < SIMULATION_STEPS; t++)
+    for (int t = 0; t < SIMULATION_STEPS; t++)
     {
-        for(int i = data->start; i < data->end; i++)
+        for (int i = data->start; i < data->end; i++)
         {
             updateVehicles(&intersections[i]);
             updateSignal(&intersections[i]);
@@ -132,60 +108,50 @@ void* processIntersections(void* arg)
     pthread_exit(NULL);
 }
 
-
-
+// ---------------- MAIN ----------------
 int main()
 {
-    srand(time(NULL));
+    // ✅ FIX: same seed for fair comparison
+    srand(42);
 
     pthread_t threads[NUM_THREADS];
     ThreadData threadData[NUM_THREADS];
 
-    pthread_mutex_init(&lock, NULL);
-
     initialize();
 
-    int intersections_per_thread = MAX_INTERSECTIONS / NUM_THREADS;
+    int chunk = MAX_INTERSECTIONS / NUM_THREADS;
 
-    clock_t start, end;
-    start = clock();
+    clock_t start = clock();
 
-    // Create threads
-    for(int i = 0; i < NUM_THREADS; i++)
+    for (int i = 0; i < NUM_THREADS; i++)
     {
-        threadData[i].start = i * intersections_per_thread;
-        threadData[i].end = threadData[i].start + intersections_per_thread;
+        threadData[i].start = i * chunk;
+        threadData[i].end = (i == NUM_THREADS - 1)
+                            ? MAX_INTERSECTIONS
+                            : threadData[i].start + chunk;
 
-        pthread_create(&threads[i],
-                       NULL,
-                       processIntersections,
-                       &threadData[i]);
+        pthread_create(&threads[i], NULL, processIntersections, &threadData[i]);
     }
 
-    // Join threads (IMPORTANT - you missed this)
-    for(int i = 0; i < NUM_THREADS; i++)
+    for (int i = 0; i < NUM_THREADS; i++)
     {
         pthread_join(threads[i], NULL);
     }
 
-    end = clock();
+    clock_t end = clock();
 
-    double time_taken = (double)(end - start) / CLOCKS_PER_SEC;
-
-    printf("Pthread Simulation Completed\n");
-    // printf("Number of Threads: %d\n", NUM_THREADS);
-    printf("Execution Time: %f seconds\n", time_taken);
+    printf("Pthreads Simulation Completed\n");
+    printf("Execution Time: %f seconds\n",
+           (double)(end - start) / CLOCKS_PER_SEC);
 
     printf("\nSample Output:\n");
-
-    for(int i = 0; i < 5; i++)
+    for (int i = 0; i < 5; i++)
     {
-        printf("Intersection %d Congestion Level: %d\n",
+        printf("Intersection %d | Congestion: %d | Signal: %s\n",
                intersections[i].id,
-               intersections[i].congestion_level);
+               intersections[i].congestion_level,
+               intersections[i].signal.state ? "GREEN" : "RED");
     }
-
-    pthread_mutex_destroy(&lock);
 
     return 0;
 }

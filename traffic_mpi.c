@@ -6,8 +6,9 @@
 #define MAX_INTERSECTIONS 50
 #define MAX_VEHICLES 100
 #define SIMULATION_STEPS 1000
+#define ROAD_LENGTH 200
 
-// Vehicle structure
+// ---------------- STRUCTURES ----------------
 typedef struct
 {
     int id;
@@ -15,116 +16,102 @@ typedef struct
     int speed;
 } Vehicle;
 
-// Traffic signal structure
-typedef struct
-{
-    int state;
-    int timer;
-} TrafficSignal;
-
-// Intersection structure
 typedef struct
 {
     int id;
     Vehicle vehicles[MAX_VEHICLES];
     int vehicle_count;
-    TrafficSignal signal;
+    int signal_state;
+    int signal_timer;
     int congestion_level;
 } Intersection;
 
-
-// Global traffic network
+// Local data (each process works on its own copy)
 Intersection intersections[MAX_INTERSECTIONS];
 
-
-// Initialize traffic system
+// ---------------- INITIALIZATION ----------------
 void initialize()
 {
-    for(int i = 0; i < MAX_INTERSECTIONS; i++)
+    for (int i = 0; i < MAX_INTERSECTIONS; i++)
     {
         intersections[i].id = i;
         intersections[i].vehicle_count = rand() % MAX_VEHICLES;
 
-        intersections[i].signal.state = rand() % 2;
-        intersections[i].signal.timer = 0;
+        intersections[i].signal_state = rand() % 2;
+        intersections[i].signal_timer = 0;
 
-        for(int j = 0; j < intersections[i].vehicle_count; j++)
+        for (int j = 0; j < intersections[i].vehicle_count; j++)
         {
             intersections[i].vehicles[j].id = j;
-            intersections[i].vehicles[j].position = rand() % 100;
+            intersections[i].vehicles[j].position = rand() % ROAD_LENGTH;
             intersections[i].vehicles[j].speed = rand() % 5 + 1;
         }
     }
 }
 
-
-// Update vehicle positions
+// ---------------- LOGIC ----------------
 void updateVehicles(Intersection *in)
 {
-    for(int i = 0; i < in->vehicle_count; i++)
+    for (int i = 0; i < in->vehicle_count; i++)
     {
         in->vehicles[i].position += in->vehicles[i].speed;
+
+        if (in->vehicles[i].position > ROAD_LENGTH)
+            in->vehicles[i].position = 0;
     }
 }
 
-
-// Update traffic signal
 void updateSignal(Intersection *in)
 {
-    in->signal.timer++;
+    in->signal_timer++;
 
-    if(in->signal.timer >= 10)
+    if (in->signal_timer >= 10)
     {
-        in->signal.state = 1 - in->signal.state;
-        in->signal.timer = 0;
+        in->signal_state = 1 - in->signal_state;
+        in->signal_timer = 0;
     }
 }
 
-
-// Calculate congestion level
 void calculateCongestion(Intersection *in)
 {
     in->congestion_level = in->vehicle_count;
 }
 
-
-
+// ---------------- MAIN ----------------
 int main(int argc, char *argv[])
 {
-    int rank, size;
-
     MPI_Init(&argc, &argv);
 
+    int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    srand(time(NULL) + rank);
+    srand(42 + rank); // FIXED SEED
 
-    // Initialize only in root process
-    if(rank == 0)
-    {
+    // Root initializes full dataset
+    if (rank == 0)
         initialize();
-    }
 
-    // Broadcast full intersection data to all processes
+    // Broadcast same initial state to all processes
     MPI_Bcast(intersections,
               sizeof(intersections),
               MPI_BYTE,
               0,
               MPI_COMM_WORLD);
 
+    // ---------------- DOMAIN DECOMPOSITION ----------------
+    int base = MAX_INTERSECTIONS / size;
+    int remainder = MAX_INTERSECTIONS % size;
 
-    int intersections_per_process = MAX_INTERSECTIONS / size;
+    int start = rank * base + (rank < remainder ? rank : remainder);
+    int count = base + (rank < remainder ? 1 : 0);
+    int end = start + count;
 
-    int start = rank * intersections_per_process;
-    int end = start + intersections_per_process;
+    double t1 = MPI_Wtime();
 
-    double start_time = MPI_Wtime();
-
-    // Simulation loop
-    for(int t = 0; t < SIMULATION_STEPS; t++)
+    for (int t = 0; t < SIMULATION_STEPS; t++)
     {
-        for(int i = start; i < end; i++)
+        for (int i = start; i < end; i++)
         {
             updateVehicles(&intersections[i]);
             updateSignal(&intersections[i]);
@@ -132,37 +119,34 @@ int main(int argc, char *argv[])
         }
     }
 
-    double end_time = MPI_Wtime();
+    double t2 = MPI_Wtime();
 
-    // Gather results back to root process
+    // ---------------- SAFE GATHER ----------------
     MPI_Gather(&intersections[start],
-               intersections_per_process * sizeof(Intersection),
+               count * sizeof(Intersection),
                MPI_BYTE,
                intersections,
-               intersections_per_process * sizeof(Intersection),
+               count * sizeof(Intersection),
                MPI_BYTE,
                0,
                MPI_COMM_WORLD);
 
-
-    // Root prints results
-    if(rank == 0)
+    // ---------------- OUTPUT ----------------
+    if (rank == 0)
     {
         printf("MPI Simulation Completed\n");
-        printf("Number of Processes: %d\n", size);
-        printf("Execution Time: %f seconds\n", end_time - start_time);
+        printf("Processes: %d\n", size);
+        printf("Execution Time: %f sec\n", t2 - t1);
 
         printf("\nSample Output:\n");
-
-        for(int i = 0; i < 5; i++)
+        for (int i = 0; i < 5; i++)
         {
-            printf("Intersection %d Congestion Level: %d\n",
+            printf("Intersection %d | Congestion: %d\n",
                    intersections[i].id,
                    intersections[i].congestion_level);
         }
     }
 
     MPI_Finalize();
-
     return 0;
 }
