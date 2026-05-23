@@ -7,7 +7,7 @@
 #define MAX_INTERSECTIONS 50
 #define MAX_VEHICLES 100
 #define SIMULATION_STEPS 1000
-#define ROAD_LENGTH 200   // ✅ FIXED
+#define ROAD_LENGTH 200   
 
 // ---------------- Structures ----------------
 typedef struct

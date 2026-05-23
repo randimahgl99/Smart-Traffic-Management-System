@@ -7,7 +7,7 @@
 #define MAX_VEHICLES 100
 #define SIMULATION_STEPS 1000
 #define NUM_THREADS 4
-#define ROAD_LENGTH 200   // ✅ FIXED
+#define ROAD_LENGTH 200   
 
 typedef struct
 {
@@ -111,7 +111,7 @@ void* processIntersections(void* arg)
 // ---------------- MAIN ----------------
 int main()
 {
-    // ✅ FIX: same seed for fair comparison
+   
     srand(42);
 
     pthread_t threads[NUM_THREADS];
