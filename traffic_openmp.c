@@ -6,131 +6,116 @@
 #define MAX_INTERSECTIONS 50
 #define MAX_VEHICLES 100
 #define SIMULATION_STEPS 1000
+#define ROAD_LENGTH 200   
 
-// Vehicle structure represents a single vehicle in the system
 typedef struct
 {
-    int id;         // Unique vehicle ID
-    int position;   // Current position on the road
-    int speed;      // Vehicle speed
+    int id;
+    int position;
+    int speed;
 } Vehicle;
 
-// Traffic signal structure
 typedef struct
 {
-    int state;  // 0 = RED, 1 = GREEN
-    int timer;  // Timer to track signal duration
+    int state;
+    int timer;
 } TrafficSignal;
 
-// Intersection structure representing each road junction
 typedef struct
 {
-    int id;                              // Intersection ID
-    Vehicle vehicles[MAX_VEHICLES];      // Vehicles at the intersection
-    int vehicle_count;                   // Number of vehicles present
-    TrafficSignal signal;                // Traffic signal at this intersection
-    int congestion_level;                // Calculated congestion level
+    int id;
+    Vehicle vehicles[MAX_VEHICLES];
+    int vehicle_count;
+    TrafficSignal signal;
+    int congestion_level;
 } Intersection;
 
-
-// Shared traffic network (global memory)
 Intersection intersections[MAX_INTERSECTIONS];
 
-
-// Initialize traffic system with random vehicles and signal states
+// ---------------- INITIALIZATION ----------------
 void initialize()
 {
-    for(int i = 0; i < MAX_INTERSECTIONS; i++)
+    for (int i = 0; i < MAX_INTERSECTIONS; i++)
     {
         intersections[i].id = i;
-
-        // Random number of vehicles at each intersection
         intersections[i].vehicle_count = rand() % MAX_VEHICLES;
 
-        // Random initial signal state
         intersections[i].signal.state = rand() % 2;
         intersections[i].signal.timer = 0;
 
-        // Initialize vehicles
-        for(int j = 0; j < intersections[i].vehicle_count; j++)
+        for (int j = 0; j < intersections[i].vehicle_count; j++)
         {
             intersections[i].vehicles[j].id = j;
-            intersections[i].vehicles[j].position = rand() % 100;
+            intersections[i].vehicles[j].position = rand() % ROAD_LENGTH;
             intersections[i].vehicles[j].speed = rand() % 5 + 1;
         }
     }
 }
 
-
-// Update vehicle positions based on their speed
+// ---------------- UPDATE VEHICLES ----------------
 void updateVehicles(Intersection *in)
 {
-    for(int i = 0; i < in->vehicle_count; i++)
+    for (int i = 0; i < in->vehicle_count; i++)
     {
         in->vehicles[i].position += in->vehicles[i].speed;
+
+        // ✅ FIX: same as serial model
+        if (in->vehicles[i].position > ROAD_LENGTH)
+        {
+            in->vehicles[i].position = 0;
+        }
     }
 }
 
-
-// Update traffic signal state periodically
+// ---------------- UPDATE SIGNAL ----------------
 void updateSignal(Intersection *in)
 {
     in->signal.timer++;
 
-    // Change signal every 10 simulation steps
-    if(in->signal.timer >= 10)
+    if (in->signal.timer >= 10)
     {
-        in->signal.state = 1 - in->signal.state; // Toggle signal
+        in->signal.state = 1 - in->signal.state;
         in->signal.timer = 0;
     }
 }
 
-
-// Calculate congestion level based on number of vehicles
+// ---------------- CONGESTION ----------------
 void calculateCongestion(Intersection *in)
 {
     in->congestion_level = in->vehicle_count;
 }
 
-
+// ---------------- MAIN ----------------
 int main()
 {
-    srand(time(NULL));
+    // ✅ FIX: use fixed seed for FAIR comparison across models
+    srand(42);
 
     initialize();
 
-    double start, end;
+    double start = omp_get_wtime();
 
-    start = omp_get_wtime();
-
-    // Main simulation loop
-    for(int t = 0; t < SIMULATION_STEPS; t++)
+    for (int t = 0; t < SIMULATION_STEPS; t++)
     {
-
-        // Parallel processing of intersections using OpenMP
-        #pragma omp parallel for shared(intersections)
-        for(int i = 0; i < MAX_INTERSECTIONS; i++)
+        #pragma omp parallel for schedule(static)
+        for (int i = 0; i < MAX_INTERSECTIONS; i++)
         {
             updateVehicles(&intersections[i]);
             updateSignal(&intersections[i]);
             calculateCongestion(&intersections[i]);
         }
-
     }
 
-    end = omp_get_wtime();
+    double end = omp_get_wtime();
 
     printf("OpenMP Traffic Simulation Completed\n");
     printf("Execution Time: %f seconds\n", end - start);
+    printf("Threads Used: %d\n", omp_get_max_threads());
 
-    printf("\nNumber of Threads Used: %d\n", omp_get_max_threads());
-
-    // Display sample results
     printf("\nSample Output:\n");
-
-    for(int i = 0; i < 5; i++)
+    for (int i = 0; i < 5; i++)
     {
-        printf("Intersection %d | Congestion Level: %d | Signal: %s\n",
+        printf("Intersection %d | Congestion: %d | Signal: %s\n",
                intersections[i].id,
                intersections[i].congestion_level,
                intersections[i].signal.state ? "GREEN" : "RED");

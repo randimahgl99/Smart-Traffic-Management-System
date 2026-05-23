@@ -6,19 +6,15 @@
 #define MAX_INTERSECTIONS 50
 #define MAX_VEHICLES 100
 #define SIMULATION_STEPS 1000
+#define ROAD_LENGTH 200
 
-
-// Vehicle structure
-typedef struct
-{
+// ---------------- Structures ----------------
+typedef struct {
     int position;
     int speed;
 } Vehicle;
 
-
-// Intersection structure
-typedef struct
-{
+typedef struct {
     int vehicle_count;
     Vehicle vehicles[MAX_VEHICLES];
     int signal_state;
@@ -26,134 +22,114 @@ typedef struct
     int congestion_level;
 } Intersection;
 
-
-
-// CUDA Kernel function
+// ---------------- CUDA Kernel ----------------
 __global__ void simulateTraffic(Intersection *intersections, int num_intersections)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if(idx < num_intersections)
+    if (idx < num_intersections)
     {
-        for(int t = 0; t < SIMULATION_STEPS; t++)
+        for (int t = 0; t < SIMULATION_STEPS; t++)
         {
             // Update vehicles
-            for(int i = 0; i < intersections[idx].vehicle_count; i++)
+            for (int i = 0; i < intersections[idx].vehicle_count; i++)
             {
                 intersections[idx].vehicles[i].position +=
-                intersections[idx].vehicles[i].speed;
+                    intersections[idx].vehicles[i].speed;
+
+                // SAME AS SERIAL / OMP / MPI / PTHREAD
+                if (intersections[idx].vehicles[i].position > ROAD_LENGTH)
+                {
+                    intersections[idx].vehicles[i].position = 0;
+                }
             }
 
             // Update signal
             intersections[idx].signal_timer++;
 
-            if(intersections[idx].signal_timer >= 10)
+            if (intersections[idx].signal_timer >= 10)
             {
                 intersections[idx].signal_state =
-                1 - intersections[idx].signal_state;
+                    1 - intersections[idx].signal_state;
 
                 intersections[idx].signal_timer = 0;
             }
 
-            // Calculate congestion
+            // Congestion
             intersections[idx].congestion_level =
-            intersections[idx].vehicle_count;
+                intersections[idx].vehicle_count;
         }
     }
 }
 
-
-
-// Initialize system
+// ---------------- Initialization ----------------
 void initialize(Intersection *intersections)
 {
-    for(int i = 0; i < MAX_INTERSECTIONS; i++)
+    srand(42); // FIXED SEED for fairness
+
+    for (int i = 0; i < MAX_INTERSECTIONS; i++)
     {
         intersections[i].vehicle_count = rand() % MAX_VEHICLES;
-
         intersections[i].signal_state = rand() % 2;
         intersections[i].signal_timer = 0;
 
-        for(int j = 0; j < intersections[i].vehicle_count; j++)
+        for (int j = 0; j < intersections[i].vehicle_count; j++)
         {
-            intersections[i].vehicles[j].position = rand() % 100;
+            intersections[i].vehicles[j].position = rand() % ROAD_LENGTH;
             intersections[i].vehicles[j].speed = rand() % 5 + 1;
         }
     }
 }
 
-
-
+// ---------------- MAIN ----------------
 int main()
 {
-    srand(time(NULL));
-
-    Intersection *h_intersections;
-    Intersection *d_intersections;
-
+    Intersection *h_intersections, *d_intersections;
     size_t size = sizeof(Intersection) * MAX_INTERSECTIONS;
 
-    // Allocate host memory
     h_intersections = (Intersection*)malloc(size);
 
     initialize(h_intersections);
 
-    // Allocate GPU memory
     cudaMalloc((void**)&d_intersections, size);
 
-    // Copy data from CPU to GPU
-    cudaMemcpy(d_intersections,
-               h_intersections,
-               size,
-               cudaMemcpyHostToDevice);
+    cudaMemcpy(d_intersections, h_intersections, size, cudaMemcpyHostToDevice);
 
+    // GPU timing (IMPORTANT FIX)
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
 
-    clock_t start, end;
+    cudaEventRecord(start);
 
-    start = clock();
-
-    // Launch kernel
     int threadsPerBlock = 256;
-    int blocksPerGrid =
-    (MAX_INTERSECTIONS + threadsPerBlock - 1) / threadsPerBlock;
+    int blocksPerGrid = (MAX_INTERSECTIONS + threadsPerBlock - 1) / threadsPerBlock;
 
-    simulateTraffic<<<blocksPerGrid, threadsPerBlock>>>
-    (d_intersections, MAX_INTERSECTIONS);
+    simulateTraffic<<<blocksPerGrid, threadsPerBlock>>>(d_intersections, MAX_INTERSECTIONS);
 
-    // Wait for GPU to finish
     cudaDeviceSynchronize();
 
-    end = clock();
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
 
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
 
-    // Copy results back to CPU
-    cudaMemcpy(h_intersections,
-               d_intersections,
-               size,
-               cudaMemcpyDeviceToHost);
-
-
-    double time_taken =
-    (double)(end - start) / CLOCKS_PER_SEC;
-
+    cudaMemcpy(h_intersections, d_intersections, size, cudaMemcpyDeviceToHost);
 
     printf("CUDA Simulation Completed\n");
-    printf("Execution Time: %f seconds\n", time_taken);
-    printf("GPU Threads Used: %d\n",
-           blocksPerGrid * threadsPerBlock);
-
+    printf("Execution Time: %f ms\n", milliseconds);
+    printf("GPU Threads Used: %d\n", blocksPerGrid * threadsPerBlock);
 
     printf("\nSample Output:\n");
 
-    for(int i = 0; i < 5; i++)
+    for (int i = 0; i < 5; i++)
     {
         printf("Intersection %d Congestion Level: %d\n",
                i,
                h_intersections[i].congestion_level);
     }
 
-
-    // Free memory
     cudaFree(d_intersections);
     free(h_intersections);
 
