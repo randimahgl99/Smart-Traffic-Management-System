@@ -56,7 +56,7 @@ void updateVehicles(Intersection *in)
     {
         in->vehicles[i].position += in->vehicles[i].speed;
 
-        // ✅ CONSISTENCY FIX (same as serial / CUDA / pthread)
+        
         if(in->vehicles[i].position > ROAD_LENGTH)
         {
             in->vehicles[i].position = 0;

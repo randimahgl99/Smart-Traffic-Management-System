@@ -59,7 +59,7 @@ void updateVehicles(Intersection *in)
     {
         in->vehicles[i].position += in->vehicles[i].speed;
 
-        // ✅ FIX: same as serial model
+       
         if (in->vehicles[i].position > ROAD_LENGTH)
         {
             in->vehicles[i].position = 0;
@@ -88,7 +88,7 @@ void calculateCongestion(Intersection *in)
 // ---------------- MAIN ----------------
 int main()
 {
-    // ✅ FIX: use fixed seed for FAIR comparison across models
+ 
     srand(42);
 
     initialize();
